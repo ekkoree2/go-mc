@@ -30,15 +30,13 @@ type JoinOptions struct {
 	MCDialer mcnet.MCDialer
 	Context  context.Context
 
-	// Indicate not to fetch and sending player's PubKey
 	NoPublicKey bool
-
-	// Specify the player PubKey to use.
-	// If nil, it will be obtained from Mojang when joining
-	KeyPair *user.KeyPairResp
+	KeyPair     *user.KeyPairResp
 
 	QueueRead  queue.Queue[pk.Packet]
 	QueueWrite queue.Queue[pk.Packet]
+
+	AuthProxy *string
 }
 
 // JoinServer connect a Minecraft server for playing the game.
@@ -146,7 +144,7 @@ func (c *Client) join(addr string, options JoinOptions) error {
 			return LoginErr{"disconnect", DisconnectErr(reason)}
 
 		case packetid.LoginEncryptionRequest: // Encryption Request
-			if err := handleEncryptionRequest(conn, c, p); err != nil {
+			if err := handleEncryptionRequest(conn, c, p, options.AuthProxy); err != nil {
 				return LoginErr{"encryption", err}
 			}
 			receiving = "set compression"

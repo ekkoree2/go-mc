@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Tnze/go-mc/data/packetid"
@@ -28,7 +29,7 @@ type Auth struct {
 	AsTk string
 }
 
-func handleEncryptionRequest(conn *net.Conn, c *Client, p pk.Packet) error {
+func handleEncryptionRequest(conn *net.Conn, c *Client, p pk.Packet, proxy *string) error {
 	// 创建AES对称加密密钥
 	key, encoStream, decoStream := newSymmetricEncryption()
 
@@ -38,7 +39,7 @@ func handleEncryptionRequest(conn *net.Conn, c *Client, p pk.Packet) error {
 		return err
 	}
 
-	err := loginAuth(c.Auth, key, er) // 向Mojang验证
+	err := loginAuth(c.Auth, key, er, proxy) // 向Mojang验证
 	if err != nil {
 		return fmt.Errorf("login fail: %v", err)
 	}
@@ -123,7 +124,7 @@ type request struct {
 	ServerID        string  `json:"serverId"`
 }
 
-func loginAuth(auth Auth, shareSecret []byte, er encryptionRequest) error {
+func loginAuth(auth Auth, shareSecret []byte, er encryptionRequest, proxy *string) error {
 	digest := authDigest(er.ServerID, shareSecret, er.PublicKey)
 
 	requestPacket, err := json.Marshal(
@@ -148,7 +149,21 @@ func loginAuth(auth Auth, shareSecret []byte, er encryptionRequest) error {
 	PostRequest.Header.Set("User-agent", "go-mc")
 	PostRequest.Header.Set("Connection", "keep-alive")
 	PostRequest.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(PostRequest)
+
+	client := http.DefaultClient
+	if proxy != nil {
+		uri, err := url.Parse(*proxy)
+		if err != nil {
+			return fmt.Errorf("parse proxy url: %v", err)
+		}
+		client = &http.Client{
+			Transport: &http.Transport{
+				Proxy: http.ProxyURL(uri),
+			},
+		}
+	}
+
+	resp, err := client.Do(PostRequest)
 	if err != nil {
 		return fmt.Errorf("post fail: %v", err)
 	}
